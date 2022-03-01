@@ -566,24 +566,19 @@ pub const Type = extern union {
                 // TODO: revisit the language specification for how to evaluate equality
                 // for error set types.
 
-                if (a.tag() == .anyerror and b.tag() == .anyerror) {
-                    return true;
+                // anyerror matches exactly.
+                const a_is_any = a.isAnyError();
+                const b_is_any = b.isAnyError();
+                if (a_is_any or b_is_any) return a_is_any and b_is_any;
+
+                const a_set = a.errorSetNames();
+                const b_set = b.errorSetNames();
+                if (a_set.len != b_set.len) return false;
+                for (b_set) |b_val| {
+                    if (!a.errorSetHasField(b_val)) return false;
                 }
 
-                if (a.tag() == .error_set and b.tag() == .error_set) {
-                    return a.castTag(.error_set).?.data.owner_decl == b.castTag(.error_set).?.data.owner_decl;
-                }
-
-                if (a.tag() == .error_set_inferred and b.tag() == .error_set_inferred) {
-                    return a.castTag(.error_set_inferred).?.data == b.castTag(.error_set_inferred).?.data;
-                }
-
-                if (a.tag() == .error_set_single and b.tag() == .error_set_single) {
-                    const a_data = a.castTag(.error_set_single).?.data;
-                    const b_data = b.castTag(.error_set_single).?.data;
-                    return std.mem.eql(u8, a_data, b_data);
-                }
-                return false;
+                return true;
             },
 
             .@"opaque" => {

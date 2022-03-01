@@ -1227,6 +1227,18 @@ pub fn resolveType(sema: *Sema, block: *Block, src: LazySrcLoc, zir_ref: Zir.Ins
     return ty;
 }
 
+/// Resolves the error set if ty is an error set or error union.
+/// Does nothing otherwise.
+pub fn resolveMaybeInferredErrorSet(sema: *Sema, ty: Type) CompileError!void {
+    switch (ty.zigTypeTag()) {
+        .ErrorSet => if (ty.castTag(.error_set_inferred)) |payload|
+            try sema.resolveInferredErrorSet(payload.data),
+
+        .ErrorUnion => try sema.resolveMaybeInferredErrorSet(ty.errorUnionSet()),
+        else => {},
+    }
+}
+
 fn analyzeAsType(
     sema: *Sema,
     block: *Block,
@@ -9699,6 +9711,11 @@ fn zirCmpEq(
     if (lhs_ty_tag == .Type and rhs_ty_tag == .Type) {
         const lhs_as_type = try sema.analyzeAsType(block, lhs_src, lhs);
         const rhs_as_type = try sema.analyzeAsType(block, rhs_src, rhs);
+
+        // If either type is an inferred error set it must now be resolved
+        try sema.resolveMaybeInferredErrorSet(lhs_as_type);
+        try sema.resolveMaybeInferredErrorSet(rhs_as_type);
+
         if (lhs_as_type.eql(rhs_as_type) == (op == .eq)) {
             return Air.Inst.Ref.bool_true;
         } else {
@@ -15283,6 +15300,11 @@ fn coerce(
     const dest_ty_src = inst_src; // TODO better source location
     const dest_ty = try sema.resolveTypeFields(block, dest_ty_src, dest_ty_unresolved);
     const inst_ty = try sema.resolveTypeFields(block, inst_src, sema.typeOf(inst));
+
+    // If either type is an inferred error set it must now be resolved
+    try sema.resolveMaybeInferredErrorSet(dest_ty);
+    try sema.resolveMaybeInferredErrorSet(inst_ty);
+
     // If the types are the same, we can return the operand.
     if (dest_ty.eql(inst_ty))
         return inst;
